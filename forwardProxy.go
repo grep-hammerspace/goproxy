@@ -61,6 +61,7 @@ func handleConnection(conn net.Conn) {
 	writeErr := request.Write(targetConn)
 	if writeErr != nil {
 		log.Printf("Error forwarding request to %s: %v", host, writeErr)
+		return
 	}
 
 	response, err := http.ReadResponse(bufio.NewReader(targetConn), request)
