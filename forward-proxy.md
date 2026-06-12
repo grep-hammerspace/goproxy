@@ -1,53 +1,45 @@
-# Forward Proxy Build Plan
+# HTTPS Support Build Plan
 
-## Phase 1 — Accept a single connection
+## Phase 7 — Detect CONNECT requests
 
-- Start a TCP listener on a port (e.g. 8080)
-- Accept one incoming connection
-- Read the raw bytes and print them to stdout
+- When a request comes in, check if the method is `CONNECT`
+- If it is, pass it to a new `handleTunnel` function
+- If it isn't, handle it as before with the existing plain HTTP logic
+- You don't need to do anything in `handleTunnel` yet, just log that you received a CONNECT request
 
-**Test:** `curl -x localhost:8080 http://example.com` and see the raw HTTP request printed
-
----
-
-## Phase 2 — Parse the destination
-
-- From the bytes you printed in phase 1, write code to extract the host and port from the request line
-- Print the extracted host/port to confirm it's correct
-
-**Test:** Same curl command, confirm you're printing `example.com:80`
+**Test:** `curl -v -x localhost:8080 https://example.com` — you should see the CONNECT request logged
 
 ---
 
-## Phase 3 — Connect to the destination
+## Phase 8 — Establish the tunnel
 
-- Open a TCP connection to the extracted host/port
-- Don't forward anything yet, just confirm the connection succeeds
+- In `handleTunnel`, extract the host and port from the CONNECT request (e.g. `example.com:443`)
+- Open a TCP connection to that host and port
+- Send `HTTP/1.1 200 Connection Established\r\n\r\n` back to the client
+- This tells the client the tunnel is open and it can begin its TLS handshake
 
-**Test:** Confirm no connection error, then close both connections
+**Test:** Same curl command — curl should no longer hang after connecting, though you won't get a full response yet
 
 ---
 
-## Phase 4 — Forward the request
+## Phase 9 — Copy bytes bidirectionally
 
-- Send the bytes you read from the client to the destination connection
-- Read the response from the destination and send it back to the client
+- Once the tunnel is established, copy bytes in both directions simultaneously:
+    - Client → target
+    - Target → client
+- These must run concurrently in two separate goroutines, since either side can send at any time
+- Use `io.Copy` for each direction
+- Wait for both goroutines to finish before closing connections
 
-**Test:** `curl -x localhost:8080 http://example.com` should return actual HTML
+**Test:** `curl -v -x localhost:8080 https://example.com` should return real HTML over HTTPS
+
 ---
 
-## Phase 5 — Handle multiple connections
+## Phase 10 — Handle tunnel teardown cleanly
 
-- Right now it handles one connection then stops
-- Wrap the accept loop so it handles connections concurrently
+- When either side closes the connection, the other side should be closed too
+- If the client disconnects, close the target connection
+- If the target disconnects, close the client connection
+- Without this, one goroutine may hang waiting for bytes that will never arrive
 
-**Test:** Run two curl commands simultaneously, both should succeed
-Done up to here.
----
-
-## Phase 6 — Handle persistent connections
-
-- A single TCP connection can carry multiple HTTP requests (keep-alive)
-- After forwarding one request, keep the connections open and handle the next request
-
-**Test:** `curl -x localhost:8080 --keepalive http://example.com http://example.com/about` — both requests should succeed over one connection
+**Test:** `curl -v -x localhost:8080 https://example.com https://example.com` — two HTTPS requests, both succeed, no hanging goroutines after completion
