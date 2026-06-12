@@ -34,7 +34,6 @@
 - Read the response from the destination and send it back to the client
 
 **Test:** `curl -x localhost:8080 http://example.com` should return actual HTML
-
 ---
 
 ## Phase 5 — Handle multiple connections
@@ -43,7 +42,7 @@
 - Wrap the accept loop so it handles connections concurrently
 
 **Test:** Run two curl commands simultaneously, both should succeed
-
+Done up to here.
 ---
 
 ## Phase 6 — Handle persistent connections
