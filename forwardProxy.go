@@ -70,6 +70,7 @@ func handleConnection(conn net.Conn) {
 			targetConn.Close()
 			return
 		}
+
 		log.Printf("Received response: %v", response)
 		response.Write(conn)
 		targetConn.Close()
